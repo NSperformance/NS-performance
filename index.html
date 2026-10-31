@@ -60,7 +60,7 @@ function pubOf(v){
   return{plate:v.plate,car:v.car||'',scount:v.scount||0,nk:n?n.nk:null,due:n?n.due:null,
     jobs:v.jobs.slice(-15).map(j=>({date:j.date,type:j.type,km:j.km,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||''}))};
 }
-async function saveVeh(v){try{v=JSON.parse(JSON.stringify(v));await window.FB.setVeh(v.plate,v,pubOf(v));return true}catch(e){err(e);return false}}
+async function saveVeh(v){try{v=JSON.parse(JSON.stringify(v));await Promise.race([window.FB.setVeh(v.plate,v,pubOf(v)),new Promise((_,r)=>setTimeout(()=>r(new Error('El servidor no respondió. Revisá tu conexión o desactivá el bloqueador de anuncios para este sitio.')),10000))]);return true}catch(e){err(e);return false}}
 async function putJob(j){
   const o=D.veh.find(x=>x.plate===j.plate),v=o?JSON.parse(JSON.stringify(o)):{plate:j.plate,jobs:[],scount:0};
   v.car=j.car||v.car||'';v.client=j.client||v.client||'';v.phone=j.phone||v.phone||'';
@@ -100,9 +100,10 @@ async function applyAll(d){
   }catch(e){err(e)}
 }
 function refresh(){if(tab==='b')rB();else if(tab==='c')rC();else if(tab!=='a')render()}
-const status=()=>!ready?'Conectando…':'Sincronizado en la nube ('+D.veh.length+' vehículos, '+D.jobs.length+' trabajos).';
+const T0=Date.now();
+const status=()=>D.cache&&ready&&Date.now()-T0>7000?'⚠ No hay conexión con la base de datos (se ven 0 datos porque no se pudo leer). Probá en una ventana de incógnito, desactivá el bloqueador de anuncios para este sitio o cambiá de red.':!ready?'Conectando…':'Sincronizado en la nube ('+D.veh.length+' vehículos, '+D.jobs.length+' trabajos).';
 window.onAuth=a=>{authed=a;ready=true;if(a)closeM();else{D.veh=[];D.pend=[];rebuild()}render()};
-window.onData=(k,d)=>{if(k==='veh'){D.veh=d;rebuild()}else if(k==='pend')D.pend=d;else if(d)D.cfg=Object.assign({},D.cfg,d);refresh()};
+window.onData=(k,d,c)=>{if(k==='veh'){D.veh=d;D.cache=!!c;rebuild()}else if(k==='pend')D.pend=d;else if(d)D.cfg=Object.assign({},D.cfg,d);refresh()};
 function loginUI(){$('modal').innerHTML=`<div class="ov" style="align-items:center"><div class="md" style="border-radius:14px;max-width:380px;margin:14px"><h1>Mi taller</h1><p class="mu">Ingresá la clave del taller.</p><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="btn" style="margin-top:12px;width:100%" onclick="doLogin()">Entrar</button></div></div>`}
 let failMsg='';window.onFail=e=>{failMsg=(e&&e.message)||String(e);render()};
 function doLogin(){window.FB.login($('lp').value).catch(()=>alert('Clave incorrecta o sin conexión.'))}
@@ -197,7 +198,7 @@ function viewA(){const c=D.cfg;return `<h1>Ajustes</h1>
   <div class="g2"><div><label>Service cada (km)</label><input id="ci" type="number" value="${c.interval}"></div><div><label>Premio cada (services)</label><input id="cr2" type="number" value="${c.rewardN}"></div></div>
   <label>Premio</label><input id="cw" value="${esc(c.reward)}">
   <button class="btn" style="margin-top:12px" onclick="saveCfg()">Guardar ajustes</button>
-  <h2>Respaldo</h2><p class="mu">Una copia de seguridad extra. Copiá este texto y guardalo; para cargarlo de nuevo, pegalo y tocá Restaurar.</p>
+  <h2>Diagnóstico</h2><button class="btn sec" onclick="runDiag()">Probar conexión</button><pre id="dg" style="white-space:pre-wrap;font-size:13px;margin:10px 0"></pre><h2>Respaldo</h2><p class="mu">Una copia de seguridad extra. Copiá este texto y guardalo; para cargarlo de nuevo, pegalo y tocá Restaurar.</p>
   <textarea id="bk" rows="6">${esc(JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg}))}</textarea>
   <div class="fl" style="margin-top:10px"><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText($('bk').value).then(()=>alert('Copiado'))">Copiar respaldo</button><button class="btn sec" onclick="restore()">Restaurar</button></div><h2>Sesión</h2><button class="btn sec" onclick="window.FB.logout()">Cerrar sesión</button>`}
 function saveCfg(){putCfg({name:$('cn').value.trim()||'Mi taller',interval:+$('ci').value||10000,rewardN:+$('cr2').value||5,reward:$('cw').value.trim()});alert('Guardado')}
@@ -244,7 +245,9 @@ async function saveJ(){
   closeM();tab='p';render();if(ok)toast('Trabajo guardado');
 }
 function toast(m){const d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--br);color:var(--on);padding:10px 18px;border-radius:20px;z-index:9;font-weight:600';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
+async function runDiag(){const o=$('dg');o.textContent='Probando… (puede tardar hasta 20 segundos)';try{o.textContent='En la app: '+D.veh.length+' vehículos, '+D.jobs.length+' trabajos\n'+await window.FB.diag()}catch(e){o.textContent='Error: '+e.message}}
 function closeM(){$('modal').innerHTML=''}
+setTimeout(()=>{if(authed)refresh()},7500);
 render();setTimeout(()=>{if(!ready&&!failMsg)$('app').innerHTML='<div class="empty">No se pudo conectar con la base de datos. Revisá config.js y tu conexión a internet.</div>'},8000);
 </script>
 <script type="module">
@@ -253,7 +256,7 @@ const V="https://www.gstatic.com/firebasejs/10.12.2/";
 const [A,Au,Fs,C]=await Promise.all([import(V+"firebase-app.js"),import(V+"firebase-auth.js"),import(V+"firebase-firestore.js"),import("./config.js")]);
 const{firebaseConfig,WORKSHOP_EMAIL}=C;
 if(JSON.stringify(firebaseConfig).includes("PEGAR_AQUI"))throw new Error("config.js todavía tiene PEGAR_AQUI. Completá los datos de tu proyecto Firebase (paso 5 de la guía) y volvé a subir el archivo.");
-const app=A.initializeApp(firebaseConfig),auth=Au.getAuth(app),db=Fs.getFirestore(app);
+const app=A.initializeApp(firebaseConfig),auth=Au.getAuth(app),db=Fs.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
 const{collection,doc,setDoc,onSnapshot,writeBatch}=Fs;
 let un=[];
 window.FB={
@@ -262,13 +265,21 @@ window.FB={
   setVeh:(pl,v,pub)=>{const b=writeBatch(db);b.set(doc(db,'veh',pl),v);b.set(doc(db,'public',pl),pub);return b.commit()},
   delVeh:pl=>{const b=writeBatch(db);b.delete(doc(db,'veh',pl));b.delete(doc(db,'public',pl));return b.commit()},
   setPend:p=>setDoc(doc(db,'pend',String(p.id)),p),
-  setCfg:c=>setDoc(doc(db,'cfg','main'),c)
+  setCfg:c=>setDoc(doc(db,'cfg','main'),c),
+  diag:async()=>{
+    const out=[],L=t=>out.push(t),T=(p,ms=9000)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error('sin respuesta en '+ms/1000+' s')),ms))]);
+    L('Proyecto: '+firebaseConfig.projectId);
+    L('Sesión: '+(auth.currentUser?auth.currentUser.email:'SIN SESIÓN'));
+    try{const q=await T(Fs.getDocsFromServer(collection(db,'veh')));L('Lectura de veh en el servidor: OK, '+q.size+' vehículos')}catch(e){L('Lectura de veh: ERROR '+(e.code||'')+' '+e.message)}
+    try{await T(setDoc(doc(db,'cfg','ping'),{t:Date.now()}));L('Escritura de prueba: OK')}catch(e){L('Escritura de prueba: ERROR '+(e.code||'')+' '+e.message)}
+    return out.join('\n');
+  }
 };
 Au.onAuthStateChanged(auth,u=>{
   un.forEach(f=>f());un=[];
   window.onAuth(!!u);
   if(u)un=[
-    onSnapshot(collection(db,'veh'),s=>window.onData('veh',s.docs.map(d=>d.data())),e=>window.onFail(e)),
+    onSnapshot(collection(db,'veh'),{includeMetadataChanges:true},s=>window.onData('veh',s.docs.map(d=>d.data()),s.metadata.fromCache),e=>window.onFail(e)),
     onSnapshot(collection(db,'pend'),s=>window.onData('pend',s.docs.map(d=>d.data())),e=>window.onFail(e)),
     onSnapshot(doc(db,'cfg','main'),s=>window.onData('cfg',s.exists()?s.data():null),e=>window.onFail(e))
   ];
