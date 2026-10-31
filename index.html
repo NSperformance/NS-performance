@@ -64,7 +64,7 @@ async function saveVeh(v){try{await window.FB.setVeh(v.plate,v,pubOf(v))}catch(e
 async function putJob(j){
   const o=D.veh.find(x=>x.plate===j.plate),v=o?JSON.parse(JSON.stringify(o)):{plate:j.plate,jobs:[],scount:0};
   v.car=j.car||v.car||'';v.client=j.client||v.client||'';v.phone=j.phone||v.phone||'';
-  v.jobs.push({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0});
+  v.jobs.push({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0,shop:!!j.shop,done:!!j.done});
   if(v.jobs.length>60)v.jobs.shift();
   if(j.type==='Service')v.scount=(v.scount||0)+1;
   await saveVeh(v);
@@ -78,7 +78,7 @@ async function rmJob(id){
 async function updJob(jb){
   const o=D.veh.find(x=>(x.jobs||[]).some(j=>j.id===jb.id));if(!o)return;
   const v=JSON.parse(JSON.stringify(o)),i=v.jobs.findIndex(j=>j.id===jb.id),old=v.jobs[i];
-  v.jobs[i]={id:jb.id,km:jb.km,date:old.date,type:jb.type,visc:jb.visc||'',prod:jb.prod||'',filters:jb.filters||[],notes:jb.notes||'',price:jb.price||0,paid:jb.paid||0};
+  v.jobs[i]={id:jb.id,km:jb.km,date:old.date,type:jb.type,visc:jb.visc||'',prod:jb.prod||'',filters:jb.filters||[],notes:jb.notes||'',price:jb.price||0,paid:jb.paid||0,shop:!!jb.shop,done:!!jb.done};
   v.car=jb.car||v.car;v.client=jb.client||v.client;v.phone=jb.phone||v.phone;
   if(old.type!==jb.type)v.scount=Math.max(0,(v.scount||0)+(jb.type==='Service'?1:-1));
   await saveVeh(v);
@@ -92,7 +92,7 @@ async function applyAll(d){
     for(const pl of Object.keys(by)){
       const js=by[pl].sort((a,b)=>a.date-b.date),l=js[js.length-1];
       await saveVeh({plate:pl,car:l.car||'',client:l.client||'',phone:l.phone||'',scount:js.filter(j=>j.type==='Service').length,
-        jobs:js.slice(-60).map(j=>({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0}))});
+        jobs:js.slice(-60).map(j=>({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0,shop:!!j.shop,done:!!j.done}))});
     }
     for(const p of d.pend||[])await putPend(p);
     if(d.cfg)await putCfg(d.cfg);
@@ -147,13 +147,22 @@ function viewP(){
   <div class="mu">Último service: ${nk(n.l.km)} km, ${fd(n.l.date)}. Próximo: ${nk(n.nk)} km, hacia el ${fd(n.due)}.</div>
   ${n.l.phone?`<a class="wa" target="_blank" rel="noopener" href="${waLink(n.l.phone,msg(n))}">Escribirle por WhatsApp</a>`:'<div class="mu">Sin teléfono cargado.</div>'}</div>`;
   const ps=D.pend.filter(p=>!p.done).sort((a,b)=>a.due-b.due);
-  return `<h1>${esc(D.cfg.name)}</h1><p class="mu" style="margin:0 0 6px">A quién llamar esta semana. ${status()}</p>
+  return `<h1>${esc(D.cfg.name)}</h1><p class="mu" style="margin:0 0 6px">A quién llamar esta semana. ${status()}</p>${shopHTML()}
+  <h2>Próximos services</h2>
   <div class="fl" style="margin:10px 0"><button class="btn ${all?'sec':''}" onclick="all=false;render()">A llamar</button><button class="btn ${all?'':'sec'}" onclick="all=true;render()">Todos</button></div>
   ${sh.length?sh.map(card).join(''):`<div class="empty">${ns.length?'Nadie para llamar por ahora.':'Cargá el primer service y acá vas a ver a quién le toca volver.'}</div>`}
   <h2>Trabajos pendientes</h2>
   ${ps.length?ps.map(p=>{const l=last(p.plate)||{};const late=p.due<Date.now();return `<div class="card"><div class="row"><span class="plate">${esc(p.plate)}</span><span class="tag ${late?'t1':'t2'}">${late?'Ya toca':'Para el '+fd(p.due)}</span></div>
   <div style="margin-top:8px">${esc(p.text)}</div><div class="mu">${esc(l.client)}</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="donePend(${p.id})">Marcar hecho</button>${l.phone?`<a class="wa" style="margin:0" target="_blank" rel="noopener" href="${waLink(l.phone,`Hola ${l.client||''}, te escribimos de ${D.cfg.name}. Quedó pendiente en tu ${l.car||'vehículo'} (${p.plate}): ${p.text}. ¿Lo coordinamos?`)}">WhatsApp</a>`:''}</div></div>`}).join(''):`<div class="empty">Anotá lo que le dijiste al cliente y nunca siguió nadie.</div>`}${debts()}`;
+}
+async function toggleDone(id,v){const j=D.jobs.find(x=>x.id===id);if(j)await updJob(Object.assign({},j,{done:v}))}
+async function deliver(id){if(!confirm('¿Marcar como entregado? Sale de la lista del taller.'))return;const j=D.jobs.find(x=>x.id===id);if(j)await updJob(Object.assign({},j,{shop:false}))}
+function shopHTML(){
+  const l=D.jobs.filter(j=>j.shop).sort((a,b)=>a.date-b.date);
+  return `<h2>En el taller (${l.length})</h2>`+(l.length?l.map(j=>`<div class="card"><div class="row"><span class="plate">${esc(j.plate)}</span><label style="display:flex;align-items:center;gap:8px;margin:0;font-size:16px"><input type="checkbox" style="width:22px;height:22px" ${j.done?'checked':''} onchange="toggleDone(${j.id},this.checked)"> ${j.done?'Hecho':'Pendiente'}</label></div>
+  <div style="margin-top:6px"><b>${esc(j.car)}</b> · ${esc(j.client)}</div><div class="mu">${j.type}${j.notes?': '+esc(j.notes):''} · ingresó el ${fd(j.date)}</div>
+  <div class="fl" style="margin-top:8px"><button class="btn sec sm" onclick="openJ(${j.id})">Editar</button>${j.done&&j.phone?`<a class="wa" style="margin:0" target="_blank" rel="noopener" href="${waLink(j.phone,`Hola ${j.client||''}, te escribimos de ${D.cfg.name}. Tu ${j.car||'vehículo'} (${j.plate}) ya está listo para retirar.`)}">Avisar que está listo</a>`:''}${j.done?`<button class="btn sm" onclick="deliver(${j.id})">Entregado</button>`:''}</div></div>`).join(''):'<div class="empty">No hay autos en el taller.</div>');
 }
 function debts(){
   const l=plates().map(p=>({p,d:debt(p),l:last(p)})).filter(x=>x.d>0).sort((a,b)=>b.d-a.d);
@@ -207,13 +216,14 @@ function openJ(id){
   <div id="sv"><div class="g2"><div><label>Viscosidad</label><select id="jv">${['0W20','0W30','5W20','5W30','5W40','10W30','10W40','10W60','15W40','20W50','25W60','Otra'].map(v=>`<option>${v}</option>`).join('')}</select></div><div><label>Producto (opcional)</label><input id="jr" placeholder="Shell Helix HX7"></div></div>
   <label>Filtros cambiados</label><div class="fl">${['aceite','aire','combustible','habitáculo'].map(f=>`<label><input type="checkbox" class="jf" value="${f}"> ${f[0].toUpperCase()+f.slice(1)}</label>`).join('')}</div></div>
   <label id="ln">Notas</label><textarea id="jo" rows="2" placeholder="Lo que hiciste y repuestos que pusiste"></textarea>
+  <div class="fl" style="margin-top:12px"><label><input type="checkbox" id="js" checked> El auto queda en el taller</label></div>
   <div class="g2"><div><label>Precio total</label><input id="jm" type="number" inputmode="numeric" oninput="dbt()"></div><div><label>Pagado</label><input id="jg" type="number" inputmode="numeric" oninput="dbt()"></div></div><div id="dbx" class="hint"></div>
   <div id="pw"><label>Trabajo pendiente (opcional)</label><div class="g2"><input id="pt" placeholder="Las pastillas están al 30%"><input id="pm" type="number" value="3" aria-label="Meses para el aviso"></div><div class="mu">El número es en cuántos meses querés que te lo recuerde.</div></div>
   <div class="row" style="margin-top:16px"><button class="btn" onclick="saveJ()">Confirmar</button><button class="btn sec" onclick="closeM()">Cancelar</button></div></div></div>`;
   if(editId){const j=D.jobs.find(x=>x.id===editId);if(j){
     $('mt').textContent='Editar trabajo';$('jp').value=j.plate;$('jp').readOnly=true;$('jk').value=j.km;$('jc').value=j.car||'';$('jn').value=j.client||'';$('jt').value=j.phone||'';
     $('jy').value=j.type;tg();$('jv').value=j.visc||'0W20';$('jr').value=j.prod||'';$('jo').value=j.notes||'';$('jm').value=j.price||'';$('jg').value=j.paid||'';
-    document.querySelectorAll('.jf').forEach(x=>{x.checked=(j.filters||[]).includes(x.value)});$('pw').style.display='none';dbt()}}
+    document.querySelectorAll('.jf').forEach(x=>{x.checked=(j.filters||[]).includes(x.value)});$('pw').style.display='none';$('js').checked=!!j.shop;dbt()}}
 }
 function tg(){$('sv').style.display=$('jy').value==='Service'?'block':'none'}
 function fill(){
@@ -226,7 +236,7 @@ async function saveJ(){
   const plate=norm($('jp').value),km=+$('jk').value;
   if(plate.length<6||!km){alert('Cargá la patente (6 o 7 caracteres) y los kilómetros.');return}
   const id=editId||Date.now();
-  const jb={id,plate,km,date:Date.now(),car:$('jc').value.trim(),client:$('jn').value.trim(),phone:$('jt').value.trim(),type:$('jy').value,visc:$('jv').value,prod:$('jr').value.trim(),filters:[...document.querySelectorAll('.jf:checked')].map(x=>x.value),notes:$('jo').value.trim(),price:+$('jm').value||0,paid:+$('jg').value||0};
+  const jb={id,plate,km,date:Date.now(),car:$('jc').value.trim(),client:$('jn').value.trim(),phone:$('jt').value.trim(),type:$('jy').value,visc:$('jv').value,prod:$('jr').value.trim(),filters:[...document.querySelectorAll('.jf:checked')].map(x=>x.value),notes:$('jo').value.trim(),price:+$('jm').value||0,paid:+$('jg').value||0,shop:$('js').checked,done:editId?!!((D.jobs.find(x=>x.id===editId)||{}).done):false};
   if(editId){await updJob(jb);closeM();render();return}
   putJob(jb);
   const t=$('pt').value.trim();
