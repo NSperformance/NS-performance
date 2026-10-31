@@ -158,6 +158,7 @@ function viewP(){
   <div style="margin-top:8px">${esc(p.text)}</div><div class="mu">${esc(l.client)}</div>
   <div class="row" style="margin-top:8px"><button class="btn sec" onclick="donePend(${p.id})">Marcar hecho</button>${l.phone?`<a class="wa" style="margin:0" target="_blank" rel="noopener" href="${waLink(l.phone,`Hola ${l.client||''}, te escribimos de ${D.cfg.name}. Quedó pendiente en tu ${l.car||'vehículo'} (${p.plate}): ${p.text}. ¿Lo coordinamos?`)}">WhatsApp</a>`:''}</div></div>`}).join(''):`<div class="empty">Anotá lo que le dijiste al cliente y nunca siguió nadie.</div>`}${debts()}`;
 }
+async function setShop(id,v){const j=D.jobs.find(x=>x.id===id);if(!j){alert('No se encontró el trabajo. Recargá la página.');return}const ok=await updJob(Object.assign({},j,{shop:v,done:false}));if(ok)toast(v?'Auto en el taller':'Sacado del taller')}
 async function toggleDone(id,v){const j=D.jobs.find(x=>x.id===id);if(j)await updJob(Object.assign({},j,{done:v}))}
 async function deliver(id){if(!confirm('¿Marcar como entregado? Sale de la lista del taller.'))return;const j=D.jobs.find(x=>x.id===id);if(j)await updJob(Object.assign({},j,{shop:false}))}
 function shopHTML(){
@@ -173,8 +174,8 @@ function debts(){
 function donePend(id){const p=D.pend.find(x=>x.id===id);if(p)putPend(Object.assign({},p,{done:true}))}
 function viewB(){return `<h1>Buscar</h1><p class="mu" style="margin:0 0 10px">Por patente, cliente o vehículo: aparece todo el historial.</p><input id="q" placeholder="Ej: ABC123" oninput="rB()" autocomplete="off"><div id="res" style="margin-top:12px"></div>`}
 function hist(pl){
-  return D.jobs.filter(j=>j.plate===pl).sort((a,b)=>b.date-a.date).map(j=>`<div style="border-top:1px solid var(--ln);padding:8px 0"><div class="row"><b>${j.type} · ${nk(j.km)} km</b><span class="mu">${fd(j.date)}</span></div>
-  <div class="mu">${j.type==='Service'?['Aceite '+(j.visc||'')+' '+(j.prod||''),...(j.filters||[]).map(f=>'filtro de '+f)].join(', '):''} ${esc(j.notes)}</div>${pay(j)}<div class="fl" style="margin-top:6px"><button class="btn sec sm" onclick="openJ(${j.id})">Editar</button>${(j.price||0)>(j.paid||0)?`<button class="btn sec sm" onclick="markPaid(${j.id})">Marcar pagado</button>`:''}<button class="btn del" onclick="delJ(${j.id})">Eliminar</button></div></div>`).join('');
+  return D.jobs.filter(j=>j.plate===pl).sort((a,b)=>b.date-a.date).map(j=>`<div style="border-top:1px solid var(--ln);padding:8px 0"><div class="row"><b>${j.type} · ${nk(j.km)} km</b>${j.shop?`<span class="tag ${j.done?'t3':'t1'}">${j.done?'Hecho, en el taller':'En el taller'}</span>`:''}<span class="mu">${fd(j.date)}</span></div>
+  <div class="mu">${j.type==='Service'?['Aceite '+(j.visc||'')+' '+(j.prod||''),...(j.filters||[]).map(f=>'filtro de '+f)].join(', '):''} ${esc(j.notes)}</div>${pay(j)}<div class="fl" style="margin-top:6px"><button class="btn sec sm" onclick="openJ(${j.id})">Editar</button><button class="btn sec sm" onclick="setShop(${j.id},${!j.shop})">${j.shop?'Sacar del taller':'Dejar en el taller'}</button>${(j.price||0)>(j.paid||0)?`<button class="btn sec sm" onclick="markPaid(${j.id})">Marcar pagado</button>`:''}<button class="btn del" onclick="delJ(${j.id})">Eliminar</button></div></div>`).join('');
 }
 function rB(){
   const q=$('q');if(!q)return;const t=norm(q.value),tl=q.value.toLowerCase().trim();
@@ -246,7 +247,7 @@ async function saveJ(){
   closeM();tab='p';render();if(ok)toast('Trabajo guardado');
 }
 function toast(m){const d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--br);color:var(--on);padding:10px 18px;border-radius:20px;z-index:9;font-weight:600';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
-async function runDiag(){const o=$('dg');o.textContent='Probando… (puede tardar hasta 20 segundos)';try{o.textContent='En la app: '+D.veh.length+' vehículos, '+D.jobs.length+' trabajos\n'+await window.FB.diag()}catch(e){o.textContent='Error: '+e.message}}
+async function runDiag(){const o=$('dg');o.textContent='Probando… (puede tardar hasta 20 segundos)';try{const lst=D.jobs.map(j=>j.plate+' · '+j.type+' · en taller: '+(j.shop?'sí':'no')+(j.done?' (hecho)':'')).join('\n');o.textContent='En la app: '+D.veh.length+' vehículos, '+D.jobs.length+' trabajos\n'+lst+'\n'+await window.FB.diag()}catch(e){o.textContent='Error: '+e.message}}
 function closeM(){$('modal').innerHTML=''}
 setTimeout(()=>{if(authed)refresh()},7500);
 render();setTimeout(()=>{if(!ready&&!failMsg)$('app').innerHTML='<div class="empty">No se pudo conectar con la base de datos. Revisá config.js y tu conexión a internet.</div>'},8000);
