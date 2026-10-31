@@ -99,7 +99,8 @@ async function applyAll(d){
     alert('Datos cargados.');
   }catch(e){err(e)}
 }
-function refresh(){if(tab==='b')rB();else if(tab==='c')rC();else if(tab!=='a')render()}
+function fillA(){const set=(id,v)=>{const e=$(id);if(e&&document.activeElement!==e)e.value=v};const c=D.cfg;set('cn',c.name);set('ci',c.interval);set('cr2',c.rewardN);set('cw',c.reward);set('bk',JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg}))}
+function refresh(){if(tab==='b')rB();else if(tab==='c')rC();else if(tab==='a')fillA();else render()}
 const T0=Date.now();
 const status=()=>D.cache&&ready&&Date.now()-T0>7000?'⚠ No hay conexión con la base de datos (se ven 0 datos porque no se pudo leer). Probá en una ventana de incógnito, desactivá el bloqueador de anuncios para este sitio o cambiá de red.':!ready?'Conectando…':'Sincronizado en la nube ('+D.veh.length+' vehículos, '+D.jobs.length+' trabajos).';
 window.onAuth=a=>{authed=a;ready=true;if(a)closeM();else{D.veh=[];D.pend=[];rebuild()}render()};
@@ -200,7 +201,7 @@ function viewA(){const c=D.cfg;return `<h1>Ajustes</h1>
   <button class="btn" style="margin-top:12px" onclick="saveCfg()">Guardar ajustes</button>
   <h2>Diagnóstico</h2><button class="btn sec" onclick="runDiag()">Probar conexión</button><pre id="dg" style="white-space:pre-wrap;font-size:13px;margin:10px 0"></pre><h2>Respaldo</h2><p class="mu">Una copia de seguridad extra. Copiá este texto y guardalo; para cargarlo de nuevo, pegalo y tocá Restaurar.</p>
   <textarea id="bk" rows="6">${esc(JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg}))}</textarea>
-  <div class="fl" style="margin-top:10px"><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText($('bk').value).then(()=>alert('Copiado'))">Copiar respaldo</button><button class="btn sec" onclick="restore()">Restaurar</button></div><h2>Sesión</h2><button class="btn sec" onclick="window.FB.logout()">Cerrar sesión</button>`}
+  <div class="fl" style="margin-top:10px"><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg})).then(()=>alert('Copiado'))">Copiar respaldo</button><button class="btn sec" onclick="restore()">Restaurar</button></div><h2>Sesión</h2><button class="btn sec" onclick="window.FB.logout()">Cerrar sesión</button>`}
 function saveCfg(){putCfg({name:$('cn').value.trim()||'Mi taller',interval:+$('ci').value||10000,rewardN:+$('cr2').value||5,reward:$('cw').value.trim()});alert('Guardado')}
 function restore(){try{const d=JSON.parse($('bk').value);if(!d.jobs||!d.cfg)throw 0;if(!confirm('¿Cargar los datos de este respaldo?'))return;applyAll(d)}catch(e){alert('El texto no es un respaldo válido.')}}
 function delJ(id){if(confirm('¿Eliminar este trabajo?'))rmJob(id)}
