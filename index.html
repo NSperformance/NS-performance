@@ -42,6 +42,7 @@ input,select,textarea{width:100%;background:var(--sf);border:1px solid var(--ln)
 .bar{height:10px;border-radius:6px;background:var(--ln);overflow:hidden;margin:8px 0}
 .bar i{display:block;height:100%;background:var(--br)}
 .hint{font-size:13px;color:var(--br);margin-top:4px}
+.deb{color:var(--r);font-weight:600}.btn.sm{padding:6px 12px;font-size:14px}
 </style>
 </head>
 <body>
@@ -63,7 +64,7 @@ async function saveVeh(v){try{await window.FB.setVeh(v.plate,v,pubOf(v))}catch(e
 async function putJob(j){
   const o=D.veh.find(x=>x.plate===j.plate),v=o?JSON.parse(JSON.stringify(o)):{plate:j.plate,jobs:[],scount:0};
   v.car=j.car||v.car||'';v.client=j.client||v.client||'';v.phone=j.phone||v.phone||'';
-  v.jobs.push({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0});
+  v.jobs.push({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0});
   if(v.jobs.length>60)v.jobs.shift();
   if(j.type==='Service')v.scount=(v.scount||0)+1;
   await saveVeh(v);
@@ -74,6 +75,15 @@ async function rmJob(id){
   v.jobs=v.jobs.filter(x=>x.id!==id);if(j&&j.type==='Service')v.scount=Math.max(0,(v.scount||1)-1);
   try{if(v.jobs.length)await window.FB.setVeh(v.plate,v,pubOf(v));else await window.FB.delVeh(v.plate)}catch(e){err(e)}
 }
+async function updJob(jb){
+  const o=D.veh.find(x=>(x.jobs||[]).some(j=>j.id===jb.id));if(!o)return;
+  const v=JSON.parse(JSON.stringify(o)),i=v.jobs.findIndex(j=>j.id===jb.id),old=v.jobs[i];
+  v.jobs[i]={id:jb.id,km:jb.km,date:old.date,type:jb.type,visc:jb.visc||'',prod:jb.prod||'',filters:jb.filters||[],notes:jb.notes||'',price:jb.price||0,paid:jb.paid||0};
+  v.car=jb.car||v.car;v.client=jb.client||v.client;v.phone=jb.phone||v.phone;
+  if(old.type!==jb.type)v.scount=Math.max(0,(v.scount||0)+(jb.type==='Service'?1:-1));
+  await saveVeh(v);
+}
+async function markPaid(id){const j=D.jobs.find(x=>x.id===id);if(j)await updJob(Object.assign({},j,{paid:j.price}))}
 function putPend(p){return window.FB.setPend(p).catch(err)}
 function putCfg(c){return window.FB.setCfg(c).catch(err)}
 async function applyAll(d){
@@ -82,7 +92,7 @@ async function applyAll(d){
     for(const pl of Object.keys(by)){
       const js=by[pl].sort((a,b)=>a.date-b.date),l=js[js.length-1];
       await saveVeh({plate:pl,car:l.car||'',client:l.client||'',phone:l.phone||'',scount:js.filter(j=>j.type==='Service').length,
-        jobs:js.slice(-60).map(j=>({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0}))});
+        jobs:js.slice(-60).map(j=>({id:j.id,km:j.km,date:j.date,type:j.type,visc:j.visc||'',prod:j.prod||'',filters:j.filters||[],notes:j.notes||'',price:j.price||0,paid:j.paid||0}))});
     }
     for(const p of d.pend||[])await putPend(p);
     if(d.cfg)await putCfg(d.cfg);
@@ -101,6 +111,10 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const fd=d=>new Date(d).toLocaleDateString('es-AR');
 const nk=n=>(+n||0).toLocaleString('es-AR');
 const DAY=864e5;
+const money=n=>(+n||0).toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
+const debt=pl=>D.jobs.filter(j=>j.plate===pl).reduce((a,j)=>a+Math.max(0,(+j.price||0)-(+j.paid||0)),0);
+const pay=j=>{const p=+j.price||0;if(!p)return'';const d=p-(+j.paid||0);return `<div class="mu">Total ${money(p)} · Pagado ${money(j.paid)} · ${d>0?`<span class="deb">Debe ${money(d)}</span>`:'<b>Al día</b>'}</div>`};
+let editId=0;
 const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 function waLink(phone,msg){let p=String(phone||'').replace(/\D/g,'').replace(/^0+/,'');if(p&&!p.startsWith('54'))p='549'+p.replace(/^15/,'');return 'https://wa.me/'+p+'?text='+encodeURIComponent(msg)}
 const last=pl=>D.jobs.filter(j=>j.plate===pl).sort((a,b)=>b.date-a.date)[0];
@@ -139,19 +153,22 @@ function viewP(){
   <h2>Trabajos pendientes</h2>
   ${ps.length?ps.map(p=>{const l=last(p.plate)||{};const late=p.due<Date.now();return `<div class="card"><div class="row"><span class="plate">${esc(p.plate)}</span><span class="tag ${late?'t1':'t2'}">${late?'Ya toca':'Para el '+fd(p.due)}</span></div>
   <div style="margin-top:8px">${esc(p.text)}</div><div class="mu">${esc(l.client)}</div>
-  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="donePend(${p.id})">Marcar hecho</button>${l.phone?`<a class="wa" style="margin:0" target="_blank" rel="noopener" href="${waLink(l.phone,`Hola ${l.client||''}, te escribimos de ${D.cfg.name}. Quedó pendiente en tu ${l.car||'vehículo'} (${p.plate}): ${p.text}. ¿Lo coordinamos?`)}">WhatsApp</a>`:''}</div></div>`}).join(''):`<div class="empty">Anotá lo que le dijiste al cliente y nunca siguió nadie.</div>`}`;
+  <div class="row" style="margin-top:8px"><button class="btn sec" onclick="donePend(${p.id})">Marcar hecho</button>${l.phone?`<a class="wa" style="margin:0" target="_blank" rel="noopener" href="${waLink(l.phone,`Hola ${l.client||''}, te escribimos de ${D.cfg.name}. Quedó pendiente en tu ${l.car||'vehículo'} (${p.plate}): ${p.text}. ¿Lo coordinamos?`)}">WhatsApp</a>`:''}</div></div>`}).join(''):`<div class="empty">Anotá lo que le dijiste al cliente y nunca siguió nadie.</div>`}${debts()}`;
+}
+function debts(){
+  const l=plates().map(p=>({p,d:debt(p),l:last(p)})).filter(x=>x.d>0).sort((a,b)=>b.d-a.d);
+  return `<h2>Cuentas pendientes</h2>`+(l.length?l.map(x=>`<div class="card"><div class="row"><span class="plate">${esc(x.p)}</span><b class="deb">${money(x.d)}</b></div><div class="mu">${esc(x.l.client)} · ${esc(x.l.car)}</div>${x.l.phone?`<a class="wa" target="_blank" rel="noopener" href="${waLink(x.l.phone,`Hola ${x.l.client||''}, te escribimos de ${D.cfg.name}. Te quedó un saldo de ${money(x.d)} del trabajo en tu ${x.l.car||'vehículo'}. ¿Cuándo podés pasar?`)}">Recordar por WhatsApp</a>`:''}</div>`).join(''):'<div class="empty">Nadie debe nada.</div>');
 }
 function donePend(id){const p=D.pend.find(x=>x.id===id);if(p)putPend(Object.assign({},p,{done:true}))}
 function viewB(){return `<h1>Buscar</h1><p class="mu" style="margin:0 0 10px">Por patente, cliente o vehículo: aparece todo el historial.</p><input id="q" placeholder="Ej: ABC123" oninput="rB()" autocomplete="off"><div id="res" style="margin-top:12px"></div>`}
 function hist(pl){
   return D.jobs.filter(j=>j.plate===pl).sort((a,b)=>b.date-a.date).map(j=>`<div style="border-top:1px solid var(--ln);padding:8px 0"><div class="row"><b>${j.type} · ${nk(j.km)} km</b><span class="mu">${fd(j.date)}</span></div>
-  <div class="mu">${j.type==='Service'?['Aceite '+(j.visc||'')+' '+(j.prod||''),...(j.filters||[]).map(f=>'filtro de '+f)].join(', '):''} ${esc(j.notes)}${j.price?' · $'+nk(j.price):''}</div>
-  <button class="btn del" onclick="delJ(${j.id})">Eliminar</button></div>`).join('');
+  <div class="mu">${j.type==='Service'?['Aceite '+(j.visc||'')+' '+(j.prod||''),...(j.filters||[]).map(f=>'filtro de '+f)].join(', '):''} ${esc(j.notes)}</div>${pay(j)}<div class="fl" style="margin-top:6px"><button class="btn sec sm" onclick="openJ(${j.id})">Editar</button>${(j.price||0)>(j.paid||0)?`<button class="btn sec sm" onclick="markPaid(${j.id})">Marcar pagado</button>`:''}<button class="btn del" onclick="delJ(${j.id})">Eliminar</button></div></div>`).join('');
 }
 function rB(){
   const q=$('q');if(!q)return;const t=norm(q.value),tl=q.value.toLowerCase().trim();
   const m=plates().filter(p=>{const l=last(p);return t&&p.includes(t)||tl&&((l.client||'').toLowerCase().includes(tl)||(l.car||'').toLowerCase().includes(tl))}).slice(0,6);
-  $('res').innerHTML=!tl?'':m.length?m.map(p=>{const l=last(p),n=nextOf(p);return `<div class="card"><div class="row"><span class="plate">${esc(p)}</span><span class="mu">${esc(l.car)} · ${esc(l.client)} ${esc(l.phone)}</span></div>${n?`<div class="hint">Próximo service: ${nk(n.nk)} km, hacia el ${fd(n.due)}</div>`:''}${hist(p)}</div>`}).join(''):'<div class="empty">No hay resultados.</div>';
+  $('res').innerHTML=!tl?'':m.length?m.map(p=>{const l=last(p),n=nextOf(p);return `<div class="card"><div class="row"><span class="plate">${esc(p)}</span><span class="mu">${esc(l.car)} · ${esc(l.client)} ${esc(l.phone)}</span></div>${n?`<div class="hint">Próximo service: ${nk(n.nk)} km, hacia el ${fd(n.due)}</div>`:''}${debt(p)?`<div class="deb">Debe en total ${money(debt(p))}</div>`:''}${hist(p)}</div>`}).join(''):'<div class="empty">No hay resultados.</div>';
 }
 function viewC(){return `<h1>Vista del cliente</h1><p class="mu" style="margin:0 0 10px">Esto es lo que ve tu cliente: escribe su patente y mira su historial y cuánto le falta para el premio. Mostrásela en tu celular o pasale el link de esta app.</p><input id="cp" placeholder="Patente" oninput="rC()" autocomplete="off" style="text-transform:uppercase;font-size:20px"><div id="cr" style="margin-top:12px"></div>`}
 function rC(){
@@ -178,8 +195,10 @@ function saveCfg(){putCfg({name:$('cn').value.trim()||'Mi taller',interval:+$('c
 function restore(){try{const d=JSON.parse($('bk').value);if(!d.jobs||!d.cfg)throw 0;if(!confirm('¿Cargar los datos de este respaldo?'))return;applyAll(d)}catch(e){alert('El texto no es un respaldo válido.')}}
 function delJ(id){if(confirm('¿Eliminar este trabajo?'))rmJob(id)}
 
-function openJ(){
-  $('modal').innerHTML=`<div class="ov" onclick="if(event.target===this)closeM()"><div class="md"><h1>Cargar trabajo</h1>
+function dbt(){const p=+$('jm').value||0,g=+$('jg').value||0;$('dbx').textContent=p?(p>g?'Debe '+money(p-g):'Pagado completo'):''}
+function openJ(id){
+  editId=id||0;
+  $('modal').innerHTML=`<div class="ov" onclick="if(event.target===this)closeM()"><div class="md"><h1 id="mt">Cargar trabajo</h1>
   <div class="g2"><div><label>Patente</label><input id="jp" style="text-transform:uppercase" onblur="fill()" autocomplete="off"></div><div><label>Kilómetros</label><input id="jk" type="number" inputmode="numeric"></div></div>
   <div id="jh" class="hint"></div>
   <div class="g2"><div><label>Vehículo</label><input id="jc" placeholder="Chevrolet Corsa"></div><div><label>Cliente</label><input id="jn"></div></div>
@@ -188,9 +207,13 @@ function openJ(){
   <div id="sv"><div class="g2"><div><label>Viscosidad</label><select id="jv">${['0W20','0W30','5W20','5W30','5W40','10W30','10W40','10W60','15W40','20W50','25W60','Otra'].map(v=>`<option>${v}</option>`).join('')}</select></div><div><label>Producto (opcional)</label><input id="jr" placeholder="Shell Helix HX7"></div></div>
   <label>Filtros cambiados</label><div class="fl">${['aceite','aire','combustible','habitáculo'].map(f=>`<label><input type="checkbox" class="jf" value="${f}"> ${f[0].toUpperCase()+f.slice(1)}</label>`).join('')}</div></div>
   <label id="ln">Notas</label><textarea id="jo" rows="2" placeholder="Lo que hiciste y repuestos que pusiste"></textarea>
-  <div class="g2"><div><label>Precio (opcional)</label><input id="jm" type="number" inputmode="numeric"></div><div></div></div>
-  <label>Trabajo pendiente (opcional)</label><div class="g2"><input id="pt" placeholder="Las pastillas están al 30%"><input id="pm" type="number" value="3" aria-label="Meses para el aviso"></div><div class="mu">El número es en cuántos meses querés que te lo recuerde.</div>
+  <div class="g2"><div><label>Precio total</label><input id="jm" type="number" inputmode="numeric" oninput="dbt()"></div><div><label>Pagado</label><input id="jg" type="number" inputmode="numeric" oninput="dbt()"></div></div><div id="dbx" class="hint"></div>
+  <div id="pw"><label>Trabajo pendiente (opcional)</label><div class="g2"><input id="pt" placeholder="Las pastillas están al 30%"><input id="pm" type="number" value="3" aria-label="Meses para el aviso"></div><div class="mu">El número es en cuántos meses querés que te lo recuerde.</div></div>
   <div class="row" style="margin-top:16px"><button class="btn" onclick="saveJ()">Confirmar</button><button class="btn sec" onclick="closeM()">Cancelar</button></div></div></div>`;
+  if(editId){const j=D.jobs.find(x=>x.id===editId);if(j){
+    $('mt').textContent='Editar trabajo';$('jp').value=j.plate;$('jp').readOnly=true;$('jk').value=j.km;$('jc').value=j.car||'';$('jn').value=j.client||'';$('jt').value=j.phone||'';
+    $('jy').value=j.type;tg();$('jv').value=j.visc||'0W20';$('jr').value=j.prod||'';$('jo').value=j.notes||'';$('jm').value=j.price||'';$('jg').value=j.paid||'';
+    document.querySelectorAll('.jf').forEach(x=>{x.checked=(j.filters||[]).includes(x.value)});$('pw').style.display='none';dbt()}}
 }
 function tg(){$('sv').style.display=$('jy').value==='Service'?'block':'none'}
 function fill(){
@@ -198,12 +221,14 @@ function fill(){
   if(!$('jc').value)$('jc').value=l.car||'';if(!$('jn').value)$('jn').value=l.client||'';if(!$('jt').value)$('jt').value=l.phone||'';
   const s=nextOf(p);$('jh').textContent=s?'Último service: '+nk(s.l.km)+' km':'Cliente conocido';
 }
-function saveJ(){
+async function saveJ(){
   if(!window.FB){alert('Todavía no hay conexión con la base de datos. Recargá la página.');return}
   const plate=norm($('jp').value),km=+$('jk').value;
   if(plate.length<6||!km){alert('Cargá la patente (6 o 7 caracteres) y los kilómetros.');return}
-  const id=Date.now();
-  putJob({id,plate,km,date:Date.now(),car:$('jc').value.trim(),client:$('jn').value.trim(),phone:$('jt').value.trim(),type:$('jy').value,visc:$('jv').value,prod:$('jr').value.trim(),filters:[...document.querySelectorAll('.jf:checked')].map(x=>x.value),notes:$('jo').value.trim(),price:+$('jm').value||0});
+  const id=editId||Date.now();
+  const jb={id,plate,km,date:Date.now(),car:$('jc').value.trim(),client:$('jn').value.trim(),phone:$('jt').value.trim(),type:$('jy').value,visc:$('jv').value,prod:$('jr').value.trim(),filters:[...document.querySelectorAll('.jf:checked')].map(x=>x.value),notes:$('jo').value.trim(),price:+$('jm').value||0,paid:+$('jg').value||0};
+  if(editId){await updJob(jb);closeM();render();return}
+  putJob(jb);
   const t=$('pt').value.trim();
   if(t)putPend({id:id+1,plate,text:t,due:Date.now()+(+$('pm').value||3)*30*DAY});
   closeM();tab='p';render();
