@@ -142,7 +142,7 @@ function render(){
   if(tab==='b')rB();if(tab==='c')rC();
 }
 function viewP(){
-  const ns=plates().map(nextOf).filter(Boolean).sort((a,b)=>a.left-b.left);
+  const ns=plates().map(p=>nextOf(p)).filter(Boolean).sort((a,b)=>a.left-b.left);
   const sh=all?ns:ns.filter(n=>n.s<3);
   const card=n=>`<div class="card"><div class="row"><span class="plate">${esc(n.l.plate)}</span><span class="tag t${n.s}">${SN[n.s]}</span></div>
   <div style="margin-top:8px"><b>${esc(n.l.car)}</b> · ${esc(n.l.client)}</div>
