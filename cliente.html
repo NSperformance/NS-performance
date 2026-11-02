@@ -58,6 +58,7 @@ async function go(){
   }catch(e){$('r').innerHTML='<div class="card">No se pudo consultar. Probá de nuevo en un momento.</div>'}
 }
 $('go').onclick=go;$('p').onkeydown=e=>{if(e.key==='Enter')go()};
+const q0=new URLSearchParams(location.search).get('p');if(q0){$('p').value=q0;go()}
 </script>
 </body>
 </html>
