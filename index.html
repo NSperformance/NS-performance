@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NS Performance</title>
 <meta name="theme-color" content="#04060A">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#04060A;--sf:#0B1426;--ink:#E8EEF8;--mu:#8C9BB5;--ln:#1B2C4A;--br:#2F6FE0;--on:#fff;--r:#FF7A80;--a:#E8B04A;--b:#7DB3EE;--g:#58C285;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -42,6 +43,16 @@ input,select,textarea{width:100%;background:var(--sf);border:1px solid var(--ln)
 .bar i{display:block;height:100%;background:var(--br)}
 .hint{font-size:13px;color:var(--br);margin-top:4px}
 .deb{color:var(--r);font-weight:600}.btn.sm{padding:6px 12px;font-size:14px}
+@page{margin:10mm}
+.ncard{width:min(9cm,100%);min-height:5.5cm;box-sizing:border-box;background:#fff;color:#0B1B3A;border:.5mm solid #0B1B3A;border-radius:3mm;display:flex;align-items:center;gap:4mm;padding:4mm;margin:14px auto;font-family:Barlow,Arial,sans-serif;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ncard *{color:#0B1B3A}
+.nq{width:3.6cm;flex:none}.nq svg{width:100%;height:auto;display:block}
+.nt{flex:1}
+.nn{font:700 6.2mm/1 "Barlow Condensed",Impact,sans-serif;text-transform:uppercase;letter-spacing:.3mm}
+.ns{font-weight:600;font-size:3.4mm;line-height:1.2;margin-top:2mm}
+.nh{font-size:2.8mm;line-height:1.25;margin-top:1.5mm}
+.np{display:inline-block;margin-top:2.5mm;border:.4mm solid #0B1B3A;border-radius:1.2mm;padding:.6mm 2.4mm;font:700 5mm/1.1 "Barlow Condensed",Impact,sans-serif;letter-spacing:.6mm}
+@media print{html,body{background:#fff!important}main,nav,.fab,.noprint{display:none!important}.ov{position:static!important;background:none!important;display:block!important}.md{background:none!important;max-height:none!important;overflow:visible!important;padding:0!important;border-radius:0!important}.ncard{margin:0!important;width:9cm!important;height:5.5cm!important}}
 </style>
 </head>
 <body>
@@ -179,7 +190,7 @@ function hist(pl){
 function rB(){
   const q=$('q');if(!q)return;const t=norm(q.value),tl=q.value.toLowerCase().trim();
   const m=plates().filter(p=>{const l=last(p);return t&&p.includes(t)||tl&&((l.client||'').toLowerCase().includes(tl)||(l.car||'').toLowerCase().includes(tl))}).slice(0,6);
-  $('res').innerHTML=!tl?'':m.length?m.map(p=>{const l=last(p),n=nextOf(p);return `<div class="card"><div class="row"><span class="plate">${esc(p)}</span><span class="mu">${esc(l.car)} · ${esc(l.client)} ${esc(l.phone)}</span></div>${n?`<div class="hint">Próximo service: ${nk(n.nk)} km, hacia el ${fd(n.due)}</div>`:''}${debt(p)?`<div class="deb">Debe en total ${money(debt(p))}</div>`:''}${hist(p)}</div>`}).join(''):'<div class="empty">No hay resultados.</div>';
+  $('res').innerHTML=!tl?'':m.length?m.map(p=>{const l=last(p),n=nextOf(p);return `<div class="card"><div class="row"><span class="plate">${esc(p)}</span><span class="mu">${esc(l.car)} · ${esc(l.client)} ${esc(l.phone)}</span></div>${n?`<div class="hint">Próximo service: ${nk(n.nk)} km, hacia el ${fd(n.due)}</div>`:''}${debt(p)?`<div class="deb">Debe en total ${money(debt(p))}</div>`:''}<div style="margin:8px 0"><button class="btn sec sm" onclick="openQR('${p}')">Código QR para el cliente</button></div>${hist(p)}</div>`}).join(''):'<div class="empty">No hay resultados.</div>';
 }
 function viewC(){return `<h1>Vista del cliente</h1><p class="mu" style="margin:0 0 10px">Esto es lo que ve tu cliente: escribe su patente y mira su historial y cuánto le falta para el premio. Mostrásela en tu celular o pasale el link de esta app.</p><input id="cp" placeholder="Patente" oninput="rC()" autocomplete="off" style="text-transform:uppercase;font-size:20px"><div id="cr" style="margin-top:12px"></div>`}
 function rC(){
@@ -199,7 +210,7 @@ function viewA(){const c=D.cfg;return `<h1>Ajustes</h1>
   <div class="g2"><div><label>Service cada (km)</label><input id="ci" type="number" value="${c.interval}"></div><div><label>Premio cada (services)</label><input id="cr2" type="number" value="${c.rewardN}"></div></div>
   <label>Premio</label><input id="cw" value="${esc(c.reward)}">
   <button class="btn" style="margin-top:12px" onclick="saveCfg()">Guardar ajustes</button>
-  <h2>Diagnóstico</h2><button class="btn sec" onclick="runDiag()">Probar conexión</button><pre id="dg" style="white-space:pre-wrap;font-size:13px;margin:10px 0"></pre><h2>Respaldo</h2><p class="mu">Una copia de seguridad extra. Copiá este texto y guardalo; para cargarlo de nuevo, pegalo y tocá Restaurar.</p>
+  <h2>Código QR general</h2><p class="mu">Para pegar en el taller: el cliente lo escanea y escribe su patente.</p><button class="btn sec" onclick="openQR('')">Ver QR general</button><h2>Diagnóstico</h2><button class="btn sec" onclick="runDiag()">Probar conexión</button><pre id="dg" style="white-space:pre-wrap;font-size:13px;margin:10px 0"></pre><h2>Respaldo</h2><p class="mu">Una copia de seguridad extra. Copiá este texto y guardalo; para cargarlo de nuevo, pegalo y tocá Restaurar.</p>
   <textarea id="bk" rows="6">${esc(JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg}))}</textarea>
   <div class="fl" style="margin-top:10px"><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(JSON.stringify({jobs:D.jobs,pend:D.pend,cfg:D.cfg})).then(()=>alert('Copiado'))">Copiar respaldo</button><button class="btn sec" onclick="restore()">Restaurar</button></div><h2>Sesión</h2><button class="btn sec" onclick="window.FB.logout()">Cerrar sesión</button>`}
 function saveCfg(){putCfg({name:$('cn').value.trim()||'NS Performance',interval:+$('ci').value||10000,rewardN:+$('cr2').value||5,reward:$('cw').value.trim()});alert('Guardado')}
@@ -247,6 +258,24 @@ async function saveJ(){
 }
 function toast(m){const d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--br);color:var(--on);padding:10px 18px;border-radius:20px;z-index:9;font-weight:600';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
 async function runDiag(){const o=$('dg');o.textContent='Probando… (puede tardar hasta 20 segundos)';try{const lst=D.jobs.map(j=>j.plate+' · '+j.type+' · en taller: '+(j.shop?'sí':'no')+(j.done?' (hecho)':'')).join('\n');o.textContent='En la app: '+D.veh.length+' vehículos, '+D.jobs.length+' trabajos\n'+lst+'\n'+await window.FB.diag()}catch(e){o.textContent='Error: '+e.message}}
+function openQR(pl){
+  const v=D.veh.find(x=>x.plate===pl)||{};
+  const url=new URL('cliente.html',location.href).href.split('?')[0].split('#')[0]+(pl?'?p='+encodeURIComponent(pl):'');
+  let svg='';
+  try{const q=qrcode(0,'M');q.addData(url);q.make();svg=q.createSvgTag({cellSize:6,margin:0,scalable:true})}catch(e){}
+  $('modal').innerHTML=`<div class="ov" onclick="if(event.target===this)closeM()"><div class="md" style="text-align:center">
+  <h1 class="noprint">Tarjeta para el cliente</h1>
+  <div class="mu noprint">${pl?esc(v.car)+' · '+esc(pl):'QR general del taller'} · vista previa, tamaño 9 × 5,5 cm</div>
+  <div class="ncard"><div class="nq">${svg||'<div style="font-size:3mm">No se pudo generar el QR. Revisá tu conexión.</div>'}</div>
+  <div class="nt"><div class="nn">${esc(D.cfg.name)}</div>
+  <div class="ns">${pl?'Historial de tu auto y próximo service':'Consultá el historial de tu auto'}</div>
+  <div class="nh">Escaneá con la cámara de tu celular${pl?'':' y escribí tu patente'}</div>
+  ${pl?`<div class="np">${esc(pl)}</div>`:''}</div></div>
+  <p class="mu noprint">Al imprimir, elegí escala 100% (no "ajustar a la página") y desactivá "Encabezados y pies de página". Podés usar papel autoadhesivo, o papel común y cinta transparente.</p>
+  <p class="mu noprint" style="word-break:break-all">${esc(url)}</p>
+  <div class="fl noprint" style="justify-content:center"><button class="btn" onclick="window.print()">Imprimir tarjeta</button><button class="btn sec" onclick="closeM()">Cerrar</button></div></div></div>`;
+  const e=document.querySelector('.nq svg');if(e){e.style.width='100%';e.style.height='auto'}
+}
 function closeM(){$('modal').innerHTML=''}
 setTimeout(()=>{if(authed)refresh()},7500);
 render();setTimeout(()=>{if(!ready&&!failMsg)$('app').innerHTML='<div class="empty">No se pudo conectar con la base de datos. Revisá config.js y tu conexión a internet.</div>'},8000);
